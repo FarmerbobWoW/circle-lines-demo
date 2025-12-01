@@ -72,6 +72,7 @@
         </marker>
       </defs>
       <g id="lines"></g>
+      <g id="labels"></g>
       <circle id="point" class="point" cx="400" cy="400" r="10"></circle>
     </svg>
   </div>
@@ -93,6 +94,7 @@
   <script>
     const svg = document.querySelector("svg");
     const linesGroup = document.getElementById("lines");
+    const labelsGroup = document.getElementById("labels");
     const point = document.getElementById("point");
     const startLineSelect = document.getElementById("startLine");
     const directionSelect = document.getElementById("direction");
@@ -110,14 +112,75 @@
         y: center.y + radius * Math.sin(angle)
       };
     });
-        function render() {
+
+    // Create 12 line elements + labels
+    anchors.forEach((A, i) => {
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "line");
+      line.setAttribute("marker-end", "url(#arrow)");
+      linesGroup.appendChild(line);
+
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", A.x);
+      label.setAttribute("y", A.y);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("dy", "-5");
+      label.textContent = i + 1;
+      labelsGroup.appendChild(label);
+
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = `Line ${i+1}`;
+      startLineSelect.appendChild(opt);
+    });
+
+    const state = { 
+      point: { x: center.x, y: center.y }, 
+      visibility: Array(12).fill(true) 
+    };
+
+    // Find where a ray from anchor toward convergence exits the circle
+    function exitPointOnCircle(A, P) {
+      let vx = P.x - A.x;
+      let vy = P.y - A.y;
+      const len = Math.hypot(vx, vy);
+      if (len < 1e-6) {
+        vx = A.x - center.x;
+        vy = A.y - center.y;
+      }
+      const invLen = 1 / Math.hypot(vx, vy);
+      const dx = vx * invLen;
+      const dy = vy * invLen;
+
+      const ax = A.x - center.x;
+      const ay = A.y - center.y;
+
+      const a = 1;
+      const b = 2 * (ax * dx + ay * dy);
+      const c = (ax * ax + ay * ay) - radius * radius;
+
+      const disc = b * b - 4 * a * c;
+      if (disc < 0) return null;
+
+      const sqrtDisc = Math.sqrt(disc);
+      const t1 = (-b - sqrtDisc) / (2 * a);
+      const t2 = (-b + sqrtDisc) / (2 * a);
+
+      const tExitCandidates = [t1, t2].filter(t => t > 1e-6);
+      const tExit = Math.min(...tExitCandidates);
+      if (!isFinite(tExit)) return null;
+
+      return { x: A.x + tExit * dx, y: A.y + tExit * dy };
+    }
+
+    function render() {
       point.setAttribute("cx", state.point.x);
       point.setAttribute("cy", state.point.y);
 
       anchors.forEach((A, i) => {
         const B = exitPointOnCircle(A, state.point);
         if (!B) return;
-        const line = linesGroup.children[i*2]; // line at even index
+        const line = linesGroup.children[i];
         line.setAttribute("x1", A.x);
         line.setAttribute("y1", A.y);
         line.setAttribute("x2", B.x);
@@ -126,24 +189,20 @@
       });
     }
 
-    // Apply Show/Hide pattern
+    // Apply Show/Hide pattern (Show, Show, Hide repeating)
     function applyPattern() {
       const startIndex = parseInt(startLineSelect.value, 10);
       const direction = directionSelect.value;
       const total = anchors.length;
-
-      // Pattern: Show, Show, Hide repeated
       const pattern = [true, true, false];
 
       let indices = Array.from({length: total}, (_, i) => i);
       if (direction === "ccw") indices.reverse();
 
-      // Rotate so startIndex is first
       while (indices[0] !== startIndex) {
         indices.push(indices.shift());
       }
 
-      // Apply pattern to state.visibility
       indices.forEach((idx, step) => {
         state.visibility[idx] = pattern[step % pattern.length];
       });
@@ -151,7 +210,6 @@
       render();
     }
 
-    // Reset all lines to visible
     function resetPattern() {
       state.visibility = Array(12).fill(true);
       render();
@@ -181,7 +239,7 @@
       const loc = svgPointFromClient(e);
       state.point.x = clamp(loc.x, 0, 800);
       state.point.y = clamp(loc.y, 0, 800);
-      render(); // keeps visibility state intact
+      render(); // preserves visibility while geometry updates
     });
     svg.addEventListener("pointerup", () => dragging = false);
     svg.addEventListener("pointerleave", () => dragging = false);
