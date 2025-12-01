@@ -10,6 +10,8 @@
       display: grid;
       place-items: center;
       min-height: 100vh;
+      color: #e5e7eb;
+      font-family: sans-serif;
     }
     .canvas {
       position: relative;
@@ -44,21 +46,56 @@
       stroke-width: 1.5;
       cursor: grab;
     }
+    .controls {
+      margin-top: 1em;
+      text-align: center;
+    }
+    label {
+      margin: 0 0.5em;
+    }
+    text {
+      font-size: 16px;
+      fill: white;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
   <div class="canvas">
     <img class="background" src="circle.png" alt="Circle background" />
     <svg viewBox="0 0 800 800">
+      <defs>
+        <!-- Arrowhead marker -->
+        <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5"
+                markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#6de39b" />
+        </marker>
+      </defs>
       <g id="lines"></g>
       <circle id="point" class="point" cx="400" cy="400" r="10"></circle>
     </svg>
+  </div>
+
+  <div class="controls">
+    <label for="startLine">Start Line:</label>
+    <select id="startLine"></select>
+
+    <label for="direction">Direction:</label>
+    <select id="direction">
+      <option value="cw">Clockwise</option>
+      <option value="ccw">Counter‑Clockwise</option>
+    </select>
+
+    <button id="applyPattern">Apply Pattern</button>
   </div>
 
   <script>
     const svg = document.querySelector("svg");
     const linesGroup = document.getElementById("lines");
     const point = document.getElementById("point");
+    const startLineSelect = document.getElementById("startLine");
+    const directionSelect = document.getElementById("direction");
+    const applyButton = document.getElementById("applyPattern");
 
     const center = { x: 400, y: 400 };
     const radius = 350;
@@ -72,11 +109,27 @@
       };
     });
 
-    // Create 12 line elements
-    anchors.forEach(() => {
+    // Create 12 line elements + labels
+    anchors.forEach((A, i) => {
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
       line.setAttribute("class", "line");
+      line.setAttribute("marker-end", "url(#arrow)");
       linesGroup.appendChild(line);
+
+      // Add number label near the anchor point
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", A.x);
+      label.setAttribute("y", A.y);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("dy", "-5");
+      label.textContent = i + 1;
+      linesGroup.appendChild(label);
+
+      // Populate dropdown
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = `Line ${i+1}`;
+      startLineSelect.appendChild(opt);
     });
 
     const state = { point: { x: center.x, y: center.y } };
@@ -122,13 +175,41 @@
       anchors.forEach((A, i) => {
         const B = exitPointOnCircle(A, state.point);
         if (!B) return;
-        const line = linesGroup.children[i];
+        const line = linesGroup.children[i*2]; // line at even index
         line.setAttribute("x1", A.x);
         line.setAttribute("y1", A.y);
         line.setAttribute("x2", B.x);
         line.setAttribute("y2", B.y);
+        line.style.display = "inline"; // reset visibility
       });
     }
+
+    // Apply Show/Hide pattern
+    function applyPattern() {
+      const startIndex = parseInt(startLineSelect.value, 10);
+      const direction = directionSelect.value;
+      const total = anchors.length;
+
+      // Pattern: Show, Show, Hide repeated
+      const pattern = [true, true, false];
+
+      let indices = Array.from({length: total}, (_, i) => i);
+      if (direction === "ccw") indices.reverse();
+
+      // Rotate so startIndex is first
+      while (indices[0] !== startIndex) {
+        indices.push(indices.shift());
+      }
+
+      // Apply pattern
+      indices.forEach((idx, step) => {
+        const show = pattern[step % pattern.length];
+        const line = linesGroup.children[idx*2]; // line element
+        line.style.display = show ? "inline" : "none";
+      });
+    }
+
+    applyButton.addEventListener("click", applyPattern);
 
     // Dragging logic
     let dragging = false;
@@ -159,5 +240,4 @@
     render();
   </script>
 </body>
-
 </html>
