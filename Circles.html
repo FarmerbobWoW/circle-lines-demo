@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Circle with 12 chords through convergence point</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0f1420;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+    }
+    .canvas {
+      position: relative;
+      width: 800px;
+      height: 800px;
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    .background {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+    }
+    svg {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    .line {
+      stroke: #6de39b;
+      stroke-width: 2;
+    }
+    .point {
+      fill: #ff5a5f;
+      stroke: white;
+      stroke-width: 1.5;
+      cursor: grab;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <img class="background" src="circle.png" alt="Circle background" />
+    <svg viewBox="0 0 800 800">
+      <g id="lines"></g>
+      <circle id="point" class="point" cx="400" cy="400" r="10"></circle>
+    </svg>
+  </div>
+
+  <script>
+    const svg = document.querySelector("svg");
+    const linesGroup = document.getElementById("lines");
+    const point = document.getElementById("point");
+
+    const center = { x: 400, y: 400 };
+    const radius = 350;
+
+    // 12 anchors evenly spaced around circumference (every 30°)
+    const anchors = Array.from({ length: 12 }, (_, i) => {
+      const angle = (i * 30) * Math.PI / 180;
+      return {
+        x: center.x + radius * Math.cos(angle),
+        y: center.y + radius * Math.sin(angle)
+      };
+    });
+
+    // Create 12 line elements
+    anchors.forEach(() => {
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("class", "line");
+      linesGroup.appendChild(line);
+    });
+
+    const state = { point: { x: center.x, y: center.y } };
+
+    // Find where a ray from anchor toward convergence exits the circle
+    function exitPointOnCircle(A, P) {
+      let vx = P.x - A.x;
+      let vy = P.y - A.y;
+      const len = Math.hypot(vx, vy);
+      if (len < 1e-6) {
+        vx = A.x - center.x;
+        vy = A.y - center.y;
+      }
+      const invLen = 1 / Math.hypot(vx, vy);
+      const dx = vx * invLen;
+      const dy = vy * invLen;
+
+      const ax = A.x - center.x;
+      const ay = A.y - center.y;
+
+      const a = 1;
+      const b = 2 * (ax * dx + ay * dy);
+      const c = (ax * ax + ay * ay) - radius * radius;
+
+      const disc = b * b - 4 * a * c;
+      if (disc < 0) return null;
+
+      const sqrtDisc = Math.sqrt(disc);
+      const t1 = (-b - sqrtDisc) / (2 * a);
+      const t2 = (-b + sqrtDisc) / (2 * a);
+
+      const tExitCandidates = [t1, t2].filter(t => t > 1e-6);
+      const tExit = Math.min(...tExitCandidates);
+      if (!isFinite(tExit)) return null;
+
+      return { x: A.x + tExit * dx, y: A.y + tExit * dy };
+    }
+
+    function render() {
+      point.setAttribute("cx", state.point.x);
+      point.setAttribute("cy", state.point.y);
+
+      anchors.forEach((A, i) => {
+        const B = exitPointOnCircle(A, state.point);
+        if (!B) return;
+        const line = linesGroup.children[i];
+        line.setAttribute("x1", A.x);
+        line.setAttribute("y1", A.y);
+        line.setAttribute("x2", B.x);
+        line.setAttribute("y2", B.y);
+      });
+    }
+
+    // Dragging logic
+    let dragging = false;
+    function svgPointFromClient(e) {
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const ctm = svg.getScreenCTM().inverse();
+      const loc = pt.matrixTransform(ctm);
+      return { x: loc.x, y: loc.y };
+    }
+    function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+    point.addEventListener("pointerdown", e => {
+      dragging = true;
+      point.setPointerCapture(e.pointerId);
+    });
+    svg.addEventListener("pointermove", e => {
+      if (!dragging) return;
+      const loc = svgPointFromClient(e);
+      state.point.x = clamp(loc.x, 0, 800);
+      state.point.y = clamp(loc.y, 0, 800);
+      render();
+    });
+    svg.addEventListener("pointerup", () => dragging = false);
+    svg.addEventListener("pointerleave", () => dragging = false);
+
+    render();
+  </script>
+</body>
+</html>
